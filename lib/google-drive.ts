@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
-import { readFile } from "fs/promises";
+import { readFile, rename } from "fs/promises";
 import { resolve } from "path";
 import { prisma } from "@/lib/prisma";
 
@@ -17,6 +17,7 @@ type StoredTokens = {
   expiresAt?: number;
   accountEmail?: string;
   accountName?: string;
+  source?: "database" | "environment" | "legacy";
 };
 
 export type GoogleDriveFile = {
@@ -33,6 +34,7 @@ const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const GOOGLE_STATE_MAX_AGE_MS = 15 * 60 * 1000;
 const STORAGE_PROVIDER = "google-drive";
 const LEGACY_TOKEN_PATH = resolve(process.cwd(), ".data", "google-drive-token.json");
+const LEGACY_EXPIRED_TOKEN_PATH = resolve(process.cwd(), ".data", "google-drive-token.expired.json");
 
 function required(name: string) {
   const value = process.env[name];
@@ -87,6 +89,7 @@ async function readStore(): Promise<StoredTokens | null> {
         refreshToken: decrypt(stored.encryptedRefreshToken),
         accountEmail: stored.accountEmail || undefined,
         accountName: stored.accountName || undefined,
+        source: "database",
       };
     }
   } catch {
@@ -99,6 +102,7 @@ async function readStore(): Promise<StoredTokens | null> {
       refreshToken: environmentToken,
       accountEmail: process.env.GOOGLE_DRIVE_ACCOUNT_EMAIL?.trim() || undefined,
       accountName: process.env.GOOGLE_DRIVE_ACCOUNT_NAME?.trim() || undefined,
+      source: "environment",
     };
   }
 
@@ -112,6 +116,7 @@ async function readStore(): Promise<StoredTokens | null> {
           expiresAt: legacy.expiresAt,
           accountEmail: legacy.accountEmail,
           accountName: legacy.accountName,
+          source: "legacy",
         };
         await writeStore(restored).catch(() => undefined);
         return restored;
@@ -131,6 +136,27 @@ async function writeStore(tokens: StoredTokens) {
     accountName: tokens.accountName || null,
   };
   await prisma.storageConnection.upsert({ where: { provider: STORAGE_PROVIDER }, create: { provider: STORAGE_PROVIDER, ...data }, update: data });
+}
+
+async function quarantineLegacyToken() {
+  if (process.env.VERCEL) return;
+  try {
+    await rename(LEGACY_TOKEN_PATH, LEGACY_EXPIRED_TOKEN_PATH);
+  } catch {
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      await rename(LEGACY_TOKEN_PATH, resolve(process.cwd(), ".data", `google-drive-token.expired-${timestamp}.json`));
+    } catch {
+      // Missing or locked legacy files should not block a clean reconnect.
+    }
+  }
+}
+
+async function invalidateStoredConnection(source?: StoredTokens["source"]) {
+  if (source !== "environment") {
+    await prisma.storageConnection.deleteMany({ where: { provider: STORAGE_PROVIDER } }).catch(() => undefined);
+    await quarantineLegacyToken();
+  }
 }
 
 async function exchangeCode(code: string, requestOrigin?: string) {
@@ -160,6 +186,7 @@ async function refreshAccessToken(stored: StoredTokens) {
   if (!response.ok || !tokens.access_token) {
     const detail = tokens.error_description || tokens.error || "Google Drive needs to be reconnected.";
     if (tokens.error === "invalid_grant" || tokens.error === "invalid_client" || detail === "Bad Request") {
+      await invalidateStoredConnection(stored.source);
       throw new Error("The previous Google Drive authorization expired or was revoked. Connect Drive again to restore access.");
     }
     throw new Error(detail);
@@ -334,6 +361,7 @@ export async function listGoogleDriveFiles() {
 
 export async function disconnectGoogleDrive() {
   await prisma.storageConnection.deleteMany({ where: { provider: STORAGE_PROVIDER } });
+  await quarantineLegacyToken();
 }
 
 export async function createGoogleDriveUploadSession(input: { fileName: string; fileSize: number; contentType?: string; parentId?: string; preserveName?: boolean }) {
