@@ -11,7 +11,7 @@ function createPrismaClient() {
     return new PrismaClient({ adapter: new PrismaLibSQL(remote) });
   }
   if (process.env.VERCEL) {
-    throw new Error("TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are required for persistent Vercel data.");
+    console.warn("Turso is not configured; database-backed features will remain unavailable until Vercel environment variables are added.");
   }
   return new PrismaClient();
 }

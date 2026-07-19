@@ -1,4 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { readFile } from "fs/promises";
+import { resolve } from "path";
 import { prisma } from "@/lib/prisma";
 
 type GoogleTokens = {
@@ -30,6 +32,7 @@ const LOGIN_SCOPES = ["openid", "email", "profile"];
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const GOOGLE_STATE_MAX_AGE_MS = 15 * 60 * 1000;
 const STORAGE_PROVIDER = "google-drive";
+const LEGACY_TOKEN_PATH = resolve(process.cwd(), ".data", "google-drive-token.json");
 
 function required(name: string) {
   const value = process.env[name];
@@ -77,13 +80,48 @@ function redirectUri(requestOrigin?: string) {
 }
 
 async function readStore(): Promise<StoredTokens | null> {
-  const stored = await prisma.storageConnection.findUnique({ where: { provider: STORAGE_PROVIDER } });
-  if (!stored) return null;
-  return {
-    refreshToken: decrypt(stored.encryptedRefreshToken),
-    accountEmail: stored.accountEmail || undefined,
-    accountName: stored.accountName || undefined,
-  };
+  try {
+    const stored = await prisma.storageConnection.findUnique({ where: { provider: STORAGE_PROVIDER } });
+    if (stored) {
+      return {
+        refreshToken: decrypt(stored.encryptedRefreshToken),
+        accountEmail: stored.accountEmail || undefined,
+        accountName: stored.accountName || undefined,
+      };
+    }
+  } catch {
+    // Environment and legacy fallbacks below keep Drive usable while the database is being configured.
+  }
+
+  const environmentToken = process.env.GOOGLE_DRIVE_REFRESH_TOKEN?.trim();
+  if (environmentToken) {
+    return {
+      refreshToken: environmentToken,
+      accountEmail: process.env.GOOGLE_DRIVE_ACCOUNT_EMAIL?.trim() || undefined,
+      accountName: process.env.GOOGLE_DRIVE_ACCOUNT_NAME?.trim() || undefined,
+    };
+  }
+
+  if (!process.env.VERCEL) {
+    try {
+      const legacy = JSON.parse(await readFile(LEGACY_TOKEN_PATH, "utf8")) as Partial<StoredTokens>;
+      if (legacy.refreshToken) {
+        const restored: StoredTokens = {
+          refreshToken: legacy.refreshToken,
+          accessToken: legacy.accessToken,
+          expiresAt: legacy.expiresAt,
+          accountEmail: legacy.accountEmail,
+          accountName: legacy.accountName,
+        };
+        await writeStore(restored).catch(() => undefined);
+        return restored;
+      }
+    } catch {
+      // A missing legacy file simply means Drive still needs authorization.
+    }
+  }
+
+  return null;
 }
 
 async function writeStore(tokens: StoredTokens) {
@@ -119,7 +157,13 @@ async function refreshAccessToken(stored: StoredTokens) {
   });
   const response = await fetch("https://oauth2.googleapis.com/token", { method: "POST", body });
   const tokens = await response.json() as GoogleTokens & { error?: string; error_description?: string };
-  if (!response.ok || !tokens.access_token) throw new Error(tokens.error_description || tokens.error || "Google Drive needs to be reconnected.");
+  if (!response.ok || !tokens.access_token) {
+    const detail = tokens.error_description || tokens.error || "Google Drive needs to be reconnected.";
+    if (tokens.error === "invalid_grant" || tokens.error === "invalid_client" || detail === "Bad Request") {
+      throw new Error("The previous Google Drive authorization expired or was revoked. Connect Drive again to restore access.");
+    }
+    throw new Error(detail);
+  }
   const next = { ...stored, accessToken: tokens.access_token, expiresAt: Date.now() + Number(tokens.expires_in || 3600) * 1000 };
   await writeStore(next);
   return next;

@@ -23,7 +23,7 @@ export async function GET() {
     try {
       drive = await listGoogleDriveFiles();
     } catch (reason) {
-      drive = { ...baseDrive, files: [], folderId: null, error: reason instanceof Error ? reason.message : "Unable to load Google Drive files." };
+      drive = { ...baseDrive, connected: false, files: [], folderId: null, error: reason instanceof Error ? reason.message : "Unable to load Google Drive files." };
     }
   }
   return NextResponse.json({
