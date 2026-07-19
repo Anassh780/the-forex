@@ -1,0 +1,10 @@
+packages:
+  - .
+
+allowBuilds:
+  '@firebase/util': true
+  '@prisma/client': true
+  '@prisma/engines': true
+  prisma: true
+  protobufjs: true
+  unrs-resolver: true

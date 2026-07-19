@@ -1,0 +1,262 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id               String           @id @default(cuid())
+  email            String           @unique
+  passwordHash     String
+  name             String?
+  image            String?
+  role             String           @default("free")
+  status           String           @default("active")
+  suspendedAt      DateTime?
+  suspensionReason String?
+  createdAt        DateTime         @default(now())
+  stripeCustomerId String?          @unique
+  purchases        Purchase[]
+  subscriptions    Subscription[]
+  progress         CourseProgress[]
+  savedStrategies  SavedStrategy[]
+  feedback         Feedback[]
+  supportTickets   SupportTicket[]
+  securityEvents   SecurityEvent[]
+  videoAccessLogs  VideoAccessLog[]
+}
+
+model Course {
+  id           String           @id @default(cuid())
+  slug         String           @unique
+  title        String
+  description  String
+  price        Float
+  videoAssetId String?
+  curriculum   String
+  level        String
+  market       String
+  instructor   String?
+  thumbnail    String?
+  published    Boolean          @default(false)
+  createdAt    DateTime         @default(now())
+  purchases    Purchase[]
+  progress     CourseProgress[]
+}
+
+model Strategy {
+  id          String          @id @default(cuid())
+  slug        String          @unique
+  title       String
+  concept     String
+  instrument  String
+  timeframe   String
+  description String
+  accessTier  String          @default("member")
+  reportUrl   String?
+  heroImage   String?
+  proofImages String?
+  published   Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+  backtest    BacktestResult?
+  savedBy     SavedStrategy[]
+}
+
+model BacktestResult {
+  id              String   @id @default(cuid())
+  strategyId      String   @unique
+  strategy        Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  winRate         Float
+  avgRR           Float
+  maxDrawdown     Float
+  totalTrades     Int
+  equityCurveData String
+  trades          Trade[]
+}
+
+model Trade {
+  id         String         @id @default(cuid())
+  backtestId String
+  backtest   BacktestResult @relation(fields: [backtestId], references: [id], onDelete: Cascade)
+  date       DateTime
+  pair       String
+  direction  String
+  result     String
+  rMultiple  Float
+}
+
+model Purchase {
+  id              String   @id @default(cuid())
+  userId          String
+  courseId        String
+  stripePaymentId String?  @unique
+  status          String   @default("pending")
+  purchasedAt     DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+}
+
+model Subscription {
+  id                   String   @id @default(cuid())
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeSubscriptionId String   @unique
+  tier                 String
+  status               String
+  currentPeriodEnd     DateTime
+
+  @@index([userId, status])
+}
+
+model CourseProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  courseId    String
+  lessonIndex Int      @default(0)
+  percent     Int      @default(0)
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+}
+
+model SavedStrategy {
+  userId     String
+  strategyId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategy   Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+
+  @@id([userId, strategyId])
+}
+
+model StorageConnection {
+  id                    String   @id @default(cuid())
+  provider              String   @unique
+  encryptedRefreshToken String
+  accountEmail          String?
+  accountName           String?
+  driveId               String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Feedback {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    String
+  rating      Int
+  message     String
+  attachments String   @default("[]")
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model CommunityLink {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  category    String
+  description String
+  url         String
+  logoUrl     String
+  accent      String   @default("#9bf56a")
+  sortOrder   Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category, sortOrder])
+}
+
+model SupportTicket {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject     String
+  category    String
+  priority    String   @default("normal")
+  status      String   @default("open")
+  message     String
+  attachments String   @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  closedAt    DateTime?
+
+  @@index([userId, createdAt])
+  @@index([status, priority, createdAt])
+}
+
+model PlanConfig {
+  id                   String   @id @default(cuid())
+  slug                 String   @unique
+  name                 String
+  tagline              String
+  monthlyPrice         Float
+  annualPrice          Float
+  monthlyStripePriceId String?
+  annualStripePriceId  String?
+  features             String
+  featured             Boolean  @default(false)
+  active               Boolean  @default(true)
+  trialDays            Int      @default(0)
+  sortOrder            Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model Coupon {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  description    String?
+  discountPercent Int
+  appliesTo      String    @default("[]")
+  active         Boolean   @default(true)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  maxRedemptions Int?
+  redemptionCount Int      @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model SecurityEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type      String
+  severity  String   @default("medium")
+  fileId    String?
+  ip        String?
+  userAgent String?
+  details   String
+  status    String   @default("open")
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+
+  @@index([status, severity, createdAt])
+  @@index([userId, createdAt])
+}
+
+model VideoAccessLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileId    String
+  action    String
+  ip        String?
+  range     String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, fileId, createdAt])
+}

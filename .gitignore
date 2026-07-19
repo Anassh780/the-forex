@@ -1,0 +1,15 @@
+.env
+.env.local
+.env.*.local
+node_modules/
+.next/
+.data/
+.vercel/
+.claude/
+*.log
+*.tsbuildinfo
+prisma/*.db
+prisma/*.db-*
+prisma/*.db-journal
+.DS_Store
+Thumbs.db
