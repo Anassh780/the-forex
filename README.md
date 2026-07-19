@@ -27,7 +27,7 @@ Vercel functions cannot persist a local SQLite file. Production therefore uses T
 
 User profile, feedback, and support attachments use Firebase Storage in production. Course videos continue to upload directly to Google Drive or Firebase through signed upload URLs, avoiding Vercel's function payload limit. Google Drive refresh tokens are encrypted and stored in the database rather than on the function filesystem.
 
-For Google Drive OAuth, register `https://YOUR-DOMAIN/api/google-drive/callback` in the OAuth client's authorized redirect URIs. On Vercel, the app automatically replaces a leftover localhost callback with the current deployment origin, but Google Cloud must still list the exact HTTPS callback used by the deployed site.
+For Google Drive OAuth, register `https://YOUR-DOMAIN/api/google-drive/callback` in the OAuth client's authorized redirect URIs. The app also supports the legacy fallback callback `https://YOUR-DOMAIN/api/gooo` for older Google clients that were created with that path. On Vercel, the app automatically replaces a leftover localhost callback with the current deployment origin, but Google Cloud must still list the exact HTTPS callback used by the deployed site.
 
 An existing Drive authorization can be restored on a new deployment by setting the server-only `GOOGLE_DRIVE_REFRESH_TOKEN`, `GOOGLE_DRIVE_ACCOUNT_EMAIL`, and `GOOGLE_DRIVE_ACCOUNT_NAME` variables. Never commit the refresh token. Local development automatically migrates the legacy `.data/google-drive-token.json` connection into the database when it is available.
 

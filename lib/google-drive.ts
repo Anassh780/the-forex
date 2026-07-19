@@ -75,7 +75,7 @@ function redirectUri(requestOrigin?: string) {
   try {
     const saved = new URL(configuredUri);
     if (saved.hostname !== "localhost" && saved.hostname !== "127.0.0.1") return configuredUri;
-    return new URL("/api/google-drive/callback", requestOrigin).toString();
+    return new URL(saved.pathname || "/api/google-drive/callback", requestOrigin).toString();
   } catch {
     return new URL("/api/google-drive/callback", requestOrigin).toString();
   }
