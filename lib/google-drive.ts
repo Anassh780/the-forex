@@ -63,6 +63,19 @@ function configured() {
   return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_DRIVE_REDIRECT_URI);
 }
 
+function redirectUri(requestOrigin?: string) {
+  const configuredUri = required("GOOGLE_DRIVE_REDIRECT_URI");
+  if (!requestOrigin || !process.env.VERCEL) return configuredUri;
+
+  try {
+    const saved = new URL(configuredUri);
+    if (saved.hostname !== "localhost" && saved.hostname !== "127.0.0.1") return configuredUri;
+    return new URL("/api/google-drive/callback", requestOrigin).toString();
+  } catch {
+    return new URL("/api/google-drive/callback", requestOrigin).toString();
+  }
+}
+
 async function readStore(): Promise<StoredTokens | null> {
   const stored = await prisma.storageConnection.findUnique({ where: { provider: STORAGE_PROVIDER } });
   if (!stored) return null;
@@ -82,12 +95,12 @@ async function writeStore(tokens: StoredTokens) {
   await prisma.storageConnection.upsert({ where: { provider: STORAGE_PROVIDER }, create: { provider: STORAGE_PROVIDER, ...data }, update: data });
 }
 
-async function exchangeCode(code: string) {
+async function exchangeCode(code: string, requestOrigin?: string) {
   const body = new URLSearchParams({
     code,
     client_id: required("GOOGLE_CLIENT_ID"),
     client_secret: required("GOOGLE_CLIENT_SECRET"),
-    redirect_uri: required("GOOGLE_DRIVE_REDIRECT_URI"),
+    redirect_uri: redirectUri(requestOrigin),
     grant_type: "authorization_code",
   });
   const response = await fetch("https://oauth2.googleapis.com/token", { method: "POST", body });
@@ -158,7 +171,7 @@ function safeCallbackUrl(callbackUrl?: string) {
   return callbackUrl?.startsWith("/") && !callbackUrl.startsWith("//") ? callbackUrl : undefined;
 }
 
-export function googleAuthUrl(mode: "login" | "drive", callbackUrl?: string) {
+export function googleAuthUrl(mode: "login" | "drive", callbackUrl?: string, requestOrigin?: string) {
   if (!configured()) throw new Error("Google OAuth is not configured.");
   const statePayload = Buffer.from(JSON.stringify({
     mode,
@@ -170,7 +183,7 @@ export function googleAuthUrl(mode: "login" | "drive", callbackUrl?: string) {
   const state = `${statePayload}.${stateSignature}`;
   const params = new URLSearchParams({
     client_id: required("GOOGLE_CLIENT_ID"),
-    redirect_uri: required("GOOGLE_DRIVE_REDIRECT_URI"),
+    redirect_uri: redirectUri(requestOrigin),
     response_type: "code",
     scope: (mode === "drive" ? [...LOGIN_SCOPES, DRIVE_SCOPE] : LOGIN_SCOPES).join(" "),
     access_type: "offline",
@@ -203,8 +216,8 @@ export function parseGoogleState(state: string | null) {
   }
 }
 
-export async function completeGoogleOAuth(code: string, connectDrive: boolean) {
-  const tokens = await exchangeCode(code);
+export async function completeGoogleOAuth(code: string, connectDrive: boolean, requestOrigin?: string) {
+  const tokens = await exchangeCode(code, requestOrigin);
   if (!tokens.access_token) throw new Error("Google did not return an access token.");
   const profileResponse = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
     headers: { Authorization: `Bearer ${tokens.access_token}` },

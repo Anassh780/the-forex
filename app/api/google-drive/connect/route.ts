@@ -16,7 +16,7 @@ export async function GET(request: Request) {
       if (!session?.user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
       if (session.user.role !== "admin") return NextResponse.json({ error: "Administrator access required." }, { status: 403 });
     }
-    return NextResponse.redirect(googleAuthUrl(mode, callbackUrl));
+    return NextResponse.redirect(googleAuthUrl(mode, callbackUrl, url.origin));
   } catch (reason) {
     const message = reason instanceof Error ? reason.message : "Google is not configured.";
     return NextResponse.json({ error: message }, { status: 503 });

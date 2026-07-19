@@ -27,6 +27,8 @@ Vercel functions cannot persist a local SQLite file. Production therefore uses T
 
 User profile, feedback, and support attachments use Firebase Storage in production. Course videos continue to upload directly to Google Drive or Firebase through signed upload URLs, avoiding Vercel's function payload limit. Google Drive refresh tokens are encrypted and stored in the database rather than on the function filesystem.
 
+For Google Drive OAuth, register `https://YOUR-DOMAIN/api/google-drive/callback` in the OAuth client's authorized redirect URIs. On Vercel, the app automatically replaces a leftover localhost callback with the current deployment origin, but Google Cloud must still list the exact HTTPS callback used by the deployed site.
+
 ## Access control
 
 The landing page, login, signup, and authentication endpoints are public. Courses, strategies, member dashboards, VIP content, admin tools, checkout, and upload APIs require a valid NextAuth session. The admin console and upload endpoint additionally require the user role to be `admin`.

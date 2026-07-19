@@ -14,12 +14,22 @@ export async function GET(request: Request) {
   const current = new URL(request.url);
   const code = current.searchParams.get("code");
   const error = current.searchParams.get("error");
-  if (error) return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(error)}`, current.origin));
-  if (!code) return NextResponse.redirect(new URL("/login?error=missing_google_code", current.origin));
+  let pendingState: ReturnType<typeof parseGoogleState> | null = null;
+  try {
+    pendingState = parseGoogleState(current.searchParams.get("state"));
+  } catch {
+    // The verified state is required below; keeping this null provides a safe login fallback.
+  }
+  const errorDestination = (message: string) => pendingState?.mode === "drive"
+    ? new URL(`/admin-ui?driveError=${encodeURIComponent(message)}`, current.origin)
+    : new URL(`/login?error=${encodeURIComponent(message)}`, current.origin);
+
+  if (error) return NextResponse.redirect(errorDestination(error));
+  if (!code) return NextResponse.redirect(errorDestination("missing_google_code"));
 
   try {
-    const state = parseGoogleState(current.searchParams.get("state"));
-    const profile = await completeGoogleOAuth(code, state.mode === "drive");
+    const state = pendingState || parseGoogleState(current.searchParams.get("state"));
+    const profile = await completeGoogleOAuth(code, state.mode === "drive", current.origin);
     const email = profile.email?.toLowerCase();
     if (!email) {
       return NextResponse.redirect(new URL("/login?error=google_email_required", current.origin));
@@ -56,7 +66,7 @@ export async function GET(request: Request) {
 
     const destination =
       state.callbackUrl ||
-      (state.mode === "drive" ? "/admin-ui" : user.role === "admin" ? "/admin-ui" : "/dashboard");
+      (state.mode === "drive" ? "/admin-ui?drive=connected" : user.role === "admin" ? "/admin-ui" : "/dashboard");
 
     const response = NextResponse.redirect(new URL(destination, current.origin));
     const secure = process.env.NEXTAUTH_URL?.startsWith("https://");
@@ -70,6 +80,6 @@ export async function GET(request: Request) {
     return response;
   } catch (reason) {
     const message = reason instanceof Error ? reason.message : "Google connection failed.";
-    return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(message)}`, current.origin));
+    return NextResponse.redirect(errorDestination(message));
   }
 }
