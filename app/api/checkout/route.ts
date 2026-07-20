@@ -12,7 +12,6 @@ function appliesTo(value: string, slug: string) {
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!process.env.STRIPE_SECRET_KEY) return NextResponse.json({ error: "Stripe is not configured" }, { status: 503 });
 
   try {
     const { planId, billing = "annual", couponCode = "" } = await request.json();
@@ -46,6 +45,9 @@ export async function POST(request: Request) {
     const baseAmount = amountForPlan(plan, billing);
     const amount = Math.max(50, Math.round(baseAmount * 100 * (1 - (coupon?.discountPercent || 0) / 100)));
     const configuredPrice = billing === "annual" ? plan.annualStripePriceId : plan.monthlyStripePriceId;
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return NextResponse.json({ error: "Manual wallet and crypto payment is available from the pricing page." }, { status: 409 });
+    }
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     const base = process.env.NEXTAUTH_URL || "http://localhost:3000";
     const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = configuredPrice && !coupon

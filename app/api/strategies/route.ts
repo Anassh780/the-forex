@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { canAccessStrategyTier } from "@/lib/plan-access";
 import { prisma } from "@/lib/prisma";
 import { serializeProofImages, serializeStrategyRecord } from "@/lib/strategy-serialize";
 
@@ -17,7 +18,13 @@ export async function GET() {
       },
       orderBy: { createdAt: "desc" },
     });
-    return NextResponse.json(strategies.map(s => serializeStrategyRecord(s as unknown as Record<string, unknown>)));
+    const visible = isAdmin ? strategies : [];
+    if (!isAdmin) {
+      for (const strategy of strategies) {
+        if (await canAccessStrategyTier((session?.user as { role?: string } | undefined)?.role, strategy.accessTier)) visible.push(strategy);
+      }
+    }
+    return NextResponse.json(visible.map(s => serializeStrategyRecord(s as unknown as Record<string, unknown>)));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to fetch strategies.";
     return NextResponse.json({ error: message }, { status: 500 });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { canAccessStrategyTier } from "@/lib/plan-access";
 import { prisma } from "@/lib/prisma";
 import { serializeStrategyRecord } from "@/lib/strategy-serialize";
 
@@ -18,6 +19,9 @@ export async function GET(_request: Request, { params }: { params: { slug: strin
     const isAdmin = (session?.user as { role?: string })?.role === "admin";
     if (!strategy.published && !isAdmin) {
       return NextResponse.json({ error: "Strategy not found." }, { status: 404 });
+    }
+    if (!isAdmin && !(await canAccessStrategyTier((session?.user as { role?: string } | undefined)?.role, strategy.accessTier))) {
+      return NextResponse.json({ error: "Upgrade your plan to access this strategy." }, { status: 403 });
     }
 
     return NextResponse.json(serializeStrategyRecord(strategy as unknown as Record<string, unknown>));

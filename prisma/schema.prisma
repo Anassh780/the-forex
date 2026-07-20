@@ -206,6 +206,7 @@ model PlanConfig {
   monthlyStripePriceId String?
   annualStripePriceId  String?
   features             String
+  entitlements         String   @default("[]")
   featured             Boolean  @default(false)
   active               Boolean  @default(true)
   trialDays            Int      @default(0)

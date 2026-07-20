@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
+import { hasPlanFeature } from "@/lib/plan-access";
 import { createStreamToken } from "@/lib/stream-token";
 import { logVideoAccess, requireActiveAccount } from "@/lib/request-security";
 
@@ -19,6 +20,9 @@ export async function POST(request: Request) {
 
   const userKey = (session.user as { id?: string; email?: string }).id || session.user.email || "member";
   if (!session.user.id) return NextResponse.json({ error: "Account identity is unavailable." }, { status: 403 });
+  if (!(await hasPlanFeature(session.user.role, "courses"))) {
+    return NextResponse.json({ error: "Your current plan does not include course access." }, { status: 403 });
+  }
   try {
     await requireActiveAccount(session.user.id);
   } catch (reason) {

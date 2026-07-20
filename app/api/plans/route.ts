@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
+import { parseEntitlements } from "@/lib/plan-access";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export async function GET() {
     prisma.planConfig.findMany({ where: isAdmin ? {} : { active: true }, orderBy: { sortOrder: "asc" } }),
     isAdmin ? prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }) : Promise.resolve([]),
   ]);
-  return NextResponse.json({ plans: plans.map(plan => ({ ...plan, features: features(plan.features) })), coupons });
+  return NextResponse.json({ plans: plans.map(plan => ({ ...plan, features: features(plan.features), entitlements: parseEntitlements(plan.entitlements) })), coupons });
 }
 
 export async function PUT(request: Request) {
@@ -26,9 +27,10 @@ export async function PUT(request: Request) {
   const updated = await prisma.planConfig.update({ where: { id: String(body.id) }, data: {
     name: String(body.name || "").trim().slice(0, 80), tagline: String(body.tagline || "").trim().slice(0, 240), monthlyPrice, annualPrice, trialDays,
     featured: Boolean(body.featured), active: body.active !== false, features: JSON.stringify(Array.isArray(body.features) ? body.features.map(String).filter(Boolean).slice(0, 20) : []),
+    entitlements: JSON.stringify(parseEntitlements(JSON.stringify(Array.isArray(body.entitlements) ? body.entitlements : []))),
     monthlyStripePriceId: String(body.monthlyStripePriceId || "").trim() || null, annualStripePriceId: String(body.annualStripePriceId || "").trim() || null,
   } });
-  return NextResponse.json({ ...updated, features: features(updated.features) });
+  return NextResponse.json({ ...updated, features: features(updated.features), entitlements: parseEntitlements(updated.entitlements) });
 }
 
 export async function POST(request: Request) {
