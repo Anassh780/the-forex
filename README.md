@@ -21,13 +21,13 @@ Vercel functions cannot persist a local SQLite file. Production therefore uses T
 1. Create a Turso database and token.
 2. Apply every SQL file in `prisma/migrations` to the Turso database in filename order.
 3. Add `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` to Vercel Production and Preview environments.
-4. Add all remaining values from `.env.example`. Set `NEXTAUTH_URL` and `GOOGLE_DRIVE_REDIRECT_URI` to the final HTTPS production domain.
+4. Add all remaining values from `.env.example`. Set `NEXTAUTH_URL` to the final HTTPS production domain. `AUTH_SECRET` can be used instead of `NEXTAUTH_SECRET`, and `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` can be used instead of `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`. Set `GOOGLE_DRIVE_REDIRECT_URI` only when you need a custom Google callback path.
 5. In Google Cloud Console, register the same production callback URL under authorized redirect URIs.
 6. Use Firebase inline credentials (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY`) on Vercel; a local service-account file path is not available there.
 
 User profile, feedback, and support attachments use Firebase Storage in production. Course videos continue to upload directly to Google Drive or Firebase through signed upload URLs, avoiding Vercel's function payload limit. Google Drive refresh tokens are encrypted and stored in the database rather than on the function filesystem.
 
-For Google Drive OAuth, register `https://YOUR-DOMAIN/api/google-drive/callback` in the OAuth client's authorized redirect URIs. The app also supports the legacy fallback callback `https://YOUR-DOMAIN/api/gooo` for older Google clients that were created with that path. On Vercel, the app automatically replaces a leftover localhost callback with the current deployment origin, but Google Cloud must still list the exact HTTPS callback used by the deployed site.
+For Google login and Drive OAuth, Vercel must have `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `NEXTAUTH_SECRET` (or the aliases `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, and `AUTH_SECRET`). Register `https://YOUR-DOMAIN/api/google-drive/callback` in the OAuth client's authorized redirect URIs. The app also supports the legacy fallback callback `https://YOUR-DOMAIN/api/gooo` for older Google clients that were created with that path. On Vercel, the app derives the production callback from the current deployment origin when `GOOGLE_DRIVE_REDIRECT_URI` is omitted, but Google Cloud must still list the exact HTTPS callback used by the deployed site.
 
 An existing Drive authorization can be restored on a new deployment by setting the server-only `GOOGLE_DRIVE_REFRESH_TOKEN`, `GOOGLE_DRIVE_ACCOUNT_EMAIL`, and `GOOGLE_DRIVE_ACCOUNT_NAME` variables. Never commit the refresh token. Local development automatically migrates the legacy `.data/google-drive-token.json` connection into the database when it is available.
 

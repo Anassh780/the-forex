@@ -19,6 +19,9 @@ export async function GET(request: Request) {
     return NextResponse.redirect(googleAuthUrl(mode, callbackUrl, url.origin));
   } catch (reason) {
     const message = reason instanceof Error ? reason.message : "Google is not configured.";
-    return NextResponse.json({ error: message }, { status: 503 });
+    if (mode === "login") {
+      return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(message)}`, url.origin));
+    }
+    return NextResponse.redirect(new URL(`/admin-ui?driveError=${encodeURIComponent(message)}`, url.origin));
   }
 }

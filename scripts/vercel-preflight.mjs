@@ -1,14 +1,22 @@
 const integrations = {
   database: ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"],
-  authentication: ["NEXTAUTH_SECRET", "NEXTAUTH_URL"],
-  googleDrive: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_DRIVE_REDIRECT_URI", "GOOGLE_ADMIN_EMAILS"],
+  authentication: [["NEXTAUTH_SECRET", "AUTH_SECRET"], "NEXTAUTH_URL"],
+  googleDrive: [["GOOGLE_CLIENT_ID", "AUTH_GOOGLE_ID"], ["GOOGLE_CLIENT_SECRET", "AUTH_GOOGLE_SECRET"], "GOOGLE_ADMIN_EMAILS"],
   firebase: ["FIREBASE_PROJECT_ID", "FIREBASE_CLIENT_EMAIL", "FIREBASE_PRIVATE_KEY", "FIREBASE_STORAGE_BUCKET"],
   stripe: ["STRIPE_SECRET_KEY", "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY"],
 };
 
+const placeholderPatterns = [/^your-/i, /^replace-with/i, /\.\.\./];
+const isSet = (variable) => {
+  const value = process.env[variable]?.trim();
+  return Boolean(value && !placeholderPatterns.some((pattern) => pattern.test(value)));
+};
+const hasVariable = (variable) => Array.isArray(variable) ? variable.some(isSet) : isSet(variable);
+const missingName = (variable) => Array.isArray(variable) ? variable.join(" or ") : variable;
+
 if (process.env.VERCEL) {
   const incomplete = Object.entries(integrations)
-    .map(([name, variables]) => ({ name, missing: variables.filter((variable) => !process.env[variable]?.trim()) }))
+    .map(([name, variables]) => ({ name, missing: variables.filter((variable) => !hasVariable(variable)).map(missingName) }))
     .filter((integration) => integration.missing.length);
 
   for (const integration of incomplete) {

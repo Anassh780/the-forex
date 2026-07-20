@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { readFile, rename } from "fs/promises";
 import { resolve } from "path";
+import { authSecret, envValue, missingEnv, requiredEnv } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
 type GoogleTokens = {
@@ -33,17 +34,14 @@ const LOGIN_SCOPES = ["openid", "email", "profile"];
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const GOOGLE_STATE_MAX_AGE_MS = 15 * 60 * 1000;
 const STORAGE_PROVIDER = "google-drive";
+const DEFAULT_GOOGLE_CALLBACK_PATH = "/api/google-drive/callback";
 const LEGACY_TOKEN_PATH = resolve(process.cwd(), ".data", "google-drive-token.json");
 const LEGACY_EXPIRED_TOKEN_PATH = resolve(process.cwd(), ".data", "google-drive-token.expired.json");
-
-function required(name: string) {
-  const value = process.env[name];
-  if (!value) throw new Error(`${name} is required.`);
-  return value;
-}
+const GOOGLE_CLIENT_ID_KEYS = ["GOOGLE_CLIENT_ID", "AUTH_GOOGLE_ID"];
+const GOOGLE_CLIENT_SECRET_KEYS = ["GOOGLE_CLIENT_SECRET", "AUTH_GOOGLE_SECRET"];
 
 function encryptionKey() {
-  return createHash("sha256").update(required("NEXTAUTH_SECRET")).digest();
+  return createHash("sha256").update(authSecret()).digest();
 }
 
 function encrypt(value: string) {
@@ -64,20 +62,37 @@ function decrypt(value: string) {
   return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
 }
 
-function configured() {
-  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_DRIVE_REDIRECT_URI);
+function deploymentOrigin() {
+  const host = envValue("VERCEL_PROJECT_PRODUCTION_URL", "VERCEL_URL");
+  if (!host) return undefined;
+  return host.startsWith("http://") || host.startsWith("https://") ? host : `https://${host}`;
+}
+
+function googleConfigMissing(requestOrigin?: string) {
+  const missing = missingEnv([GOOGLE_CLIENT_ID_KEYS, GOOGLE_CLIENT_SECRET_KEYS, ["NEXTAUTH_SECRET", "AUTH_SECRET"]]);
+  if (!requestOrigin && !deploymentOrigin() && !envValue("GOOGLE_DRIVE_REDIRECT_URI")) missing.push("GOOGLE_DRIVE_REDIRECT_URI");
+  return missing;
+}
+
+function configured(requestOrigin?: string) {
+  return googleConfigMissing(requestOrigin).length === 0;
 }
 
 function redirectUri(requestOrigin?: string) {
-  const configuredUri = required("GOOGLE_DRIVE_REDIRECT_URI");
-  if (!requestOrigin || !process.env.VERCEL) return configuredUri;
+  const configuredUri = envValue("GOOGLE_DRIVE_REDIRECT_URI");
+  const origin = requestOrigin || deploymentOrigin();
+  if (!configuredUri) {
+    if (origin) return new URL(DEFAULT_GOOGLE_CALLBACK_PATH, origin).toString();
+    throw new Error("GOOGLE_DRIVE_REDIRECT_URI is required.");
+  }
+  if (!origin || !process.env.VERCEL) return configuredUri;
 
   try {
     const saved = new URL(configuredUri);
     if (saved.hostname !== "localhost" && saved.hostname !== "127.0.0.1") return configuredUri;
-    return new URL(saved.pathname || "/api/google-drive/callback", requestOrigin).toString();
+    return new URL(saved.pathname || DEFAULT_GOOGLE_CALLBACK_PATH, origin).toString();
   } catch {
-    return new URL("/api/google-drive/callback", requestOrigin).toString();
+    return new URL(DEFAULT_GOOGLE_CALLBACK_PATH, origin).toString();
   }
 }
 
@@ -162,8 +177,8 @@ async function invalidateStoredConnection(source?: StoredTokens["source"]) {
 async function exchangeCode(code: string, requestOrigin?: string) {
   const body = new URLSearchParams({
     code,
-    client_id: required("GOOGLE_CLIENT_ID"),
-    client_secret: required("GOOGLE_CLIENT_SECRET"),
+    client_id: requiredEnv(...GOOGLE_CLIENT_ID_KEYS),
+    client_secret: requiredEnv(...GOOGLE_CLIENT_SECRET_KEYS),
     redirect_uri: redirectUri(requestOrigin),
     grant_type: "authorization_code",
   });
@@ -176,8 +191,8 @@ async function exchangeCode(code: string, requestOrigin?: string) {
 async function refreshAccessToken(stored: StoredTokens) {
   if (stored.accessToken && stored.expiresAt && stored.expiresAt > Date.now() + 60_000) return stored;
   const body = new URLSearchParams({
-    client_id: required("GOOGLE_CLIENT_ID"),
-    client_secret: required("GOOGLE_CLIENT_SECRET"),
+    client_id: requiredEnv(...GOOGLE_CLIENT_ID_KEYS),
+    client_secret: requiredEnv(...GOOGLE_CLIENT_SECRET_KEYS),
     refresh_token: stored.refreshToken,
     grant_type: "refresh_token",
   });
@@ -243,17 +258,18 @@ function safeCallbackUrl(callbackUrl?: string) {
 }
 
 export function googleAuthUrl(mode: "login" | "drive", callbackUrl?: string, requestOrigin?: string) {
-  if (!configured()) throw new Error("Google OAuth is not configured.");
+  const missing = googleConfigMissing(requestOrigin);
+  if (missing.length) throw new Error(`Google OAuth is not configured. Missing: ${missing.join(", ")}.`);
   const statePayload = Buffer.from(JSON.stringify({
     mode,
     callbackUrl: safeCallbackUrl(callbackUrl),
     issuedAt: Date.now(),
     nonce: randomBytes(12).toString("hex"),
   })).toString("base64url");
-  const stateSignature = createHmac("sha256", required("NEXTAUTH_SECRET")).update(statePayload).digest("base64url");
+  const stateSignature = createHmac("sha256", authSecret()).update(statePayload).digest("base64url");
   const state = `${statePayload}.${stateSignature}`;
   const params = new URLSearchParams({
-    client_id: required("GOOGLE_CLIENT_ID"),
+    client_id: requiredEnv(...GOOGLE_CLIENT_ID_KEYS),
     redirect_uri: redirectUri(requestOrigin),
     response_type: "code",
     scope: (mode === "drive" ? [...LOGIN_SCOPES, DRIVE_SCOPE] : LOGIN_SCOPES).join(" "),
@@ -270,7 +286,7 @@ export function parseGoogleState(state: string | null) {
   try {
     const [payload, signature, extra] = state.split(".");
     if (!payload || !signature || extra) throw new Error("Malformed state.");
-    const expected = createHmac("sha256", required("NEXTAUTH_SECRET")).update(payload).digest();
+    const expected = createHmac("sha256", authSecret()).update(payload).digest();
     const received = Buffer.from(signature, "base64url");
     if (received.length !== expected.length || !timingSafeEqual(received, expected)) throw new Error("Invalid signature.");
 
@@ -320,7 +336,7 @@ function driveFolderName() {
 }
 
 export async function googleDriveStatus() {
-  const missing = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_DRIVE_REDIRECT_URI"].filter(name => !process.env[name]);
+  const missing = googleConfigMissing();
   const stored = missing.length ? null : await readStore();
   return {
     configured: missing.length === 0,

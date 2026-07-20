@@ -1,5 +1,6 @@
 import { encode } from "next-auth/jwt";
 import { NextResponse } from "next/server";
+import { authSecret } from "@/lib/env";
 import { completeGoogleOAuth, parseGoogleState, roleForEmail } from "@/lib/google-drive";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
@@ -53,7 +54,7 @@ export async function GET(request: Request) {
     }
 
     const token = await encode({
-      secret: process.env.NEXTAUTH_SECRET || "",
+      secret: authSecret(),
       maxAge: SESSION_MAX_AGE,
       token: {
         sub: user.id,

@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { authSecret } from "@/lib/env";
 
 // Short-lived, session-bound, single-file tokens gate the video stream so a
 // raw stream URL copied by a download extension or pasted elsewhere is useless:
@@ -7,9 +8,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 const TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 function secret() {
-  const value = process.env.NEXTAUTH_SECRET;
-  if (!value) throw new Error("NEXTAUTH_SECRET is required to sign stream tokens.");
-  return value;
+  return authSecret();
 }
 
 function sign(body: string) {
