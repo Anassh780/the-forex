@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import Stripe from "stripe";
 import { authOptions } from "@/lib/auth";
+import { amountForPlan, grantPlanAccess } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 
 function appliesTo(value: string, slug: string) {
@@ -17,7 +18,22 @@ export async function POST(request: Request) {
     const { planId, billing = "annual", couponCode = "" } = await request.json();
     if (!planId || !["monthly", "annual"].includes(billing)) throw new Error("Choose a valid plan and billing period.");
     const plan = await prisma.planConfig.findFirst({ where: { OR: [{ id: String(planId) }, { slug: String(planId) }], active: true } });
-    if (!plan || plan.monthlyPrice <= 0) throw new Error("This plan is not available for checkout.");
+    if (!plan) throw new Error("This plan is not available for checkout.");
+
+    if (plan.trialDays > 0) {
+      const user = await prisma.user.findUnique({ where: { email: session.user.email.toLowerCase() }, select: { id: true } });
+      if (!user) throw new Error("User account not found.");
+      const access = await grantPlanAccess({
+        userId: user.id,
+        planSlug: plan.slug,
+        billing: "trial",
+        sourceId: `trial_${user.id}_${plan.slug}`,
+        days: plan.trialDays,
+      });
+      return NextResponse.json({ ok: true, trial: true, role: access.role, redirect: "/dashboard?trial=started" });
+    }
+
+    if (plan.monthlyPrice <= 0) throw new Error("This plan is not available for checkout.");
 
     let coupon: Awaited<ReturnType<typeof prisma.coupon.findUnique>> = null;
     const now = new Date();
@@ -27,7 +43,7 @@ export async function POST(request: Request) {
       if (!valid) throw new Error("That coupon is invalid, expired, or not available for this plan.");
     }
 
-    const baseAmount = billing === "annual" ? plan.annualPrice * 12 : plan.monthlyPrice;
+    const baseAmount = amountForPlan(plan, billing);
     const amount = Math.max(50, Math.round(baseAmount * 100 * (1 - (coupon?.discountPercent || 0) / 100)));
     const configuredPrice = billing === "annual" ? plan.annualStripePriceId : plan.monthlyStripePriceId;
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);

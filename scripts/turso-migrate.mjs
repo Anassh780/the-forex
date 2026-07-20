@@ -27,7 +27,7 @@ async function tableExists(name) {
 }
 
 try {
-  const hasMigrationHistory = await tableExists("__edgeledger_migrations");
+  const hadMigrationHistory = await tableExists("__edgeledger_migrations");
   const hasUserTable = await tableExists("User");
 
   await client.execute(`
@@ -42,15 +42,14 @@ try {
     .map(entry => entry.name)
     .sort();
 
-  if (!hasMigrationHistory && hasUserTable) {
-    console.log("[Turso migrate] Existing app tables detected; recording migrations as already applied.");
-    for (const migration of migrations) {
+  if (!hadMigrationHistory && hasUserTable) {
+    console.log("[Turso migrate] Existing app tables detected; recording baseline migrations.");
+    for (const migration of migrations.filter(name => name < "20260720080000_manual_payments")) {
       await client.execute({
         sql: 'INSERT OR IGNORE INTO "__edgeledger_migrations" ("id") VALUES (?)',
         args: [migration],
       });
     }
-    process.exit(0);
   }
 
   for (const migration of migrations) {

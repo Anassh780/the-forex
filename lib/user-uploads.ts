@@ -3,7 +3,7 @@ import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import { extname, join, resolve } from "path";
 import { firebaseUserStorageConfigured, readFirebaseUserFile, removeFirebaseUserFile, saveFirebaseUserFile } from "@/lib/firebase-storage";
 
-export type UserUploadKind = "profiles" | "feedback" | "support";
+export type UserUploadKind = "profiles" | "feedback" | "support" | "payments";
 
 const UPLOAD_ROOT = resolve(process.cwd(), ".data", "user-uploads");
 const PROFILE_MAX_BYTES = 3 * 1024 * 1024;
@@ -49,6 +49,9 @@ function validateUpload(file: File, kind: UserUploadKind) {
   if (kind === "profiles" && !isRasterImage) throw new Error("Profile pictures must be JPG, PNG, GIF, or WebP images.");
 
   const isFeedbackType = isRasterImage || file.type.startsWith("audio/") || file.type.startsWith("video/") || SAFE_DOCUMENT_TYPES.has(file.type) || SAFE_EXTENSIONS.has(extension);
+  if (kind === "payments" && !isRasterImage && file.type !== "application/pdf" && extension !== ".pdf") {
+    throw new Error("Payment proof must be an image or PDF.");
+  }
   if ((kind === "feedback" || kind === "support") && !isFeedbackType) throw new Error(`${file.name} is not a supported image, audio, video, or document format.`);
   return extension || (isRasterImage ? ".jpg" : "");
 }
@@ -75,7 +78,7 @@ export async function saveUserFile(file: File, kind: UserUploadKind, userId: str
 }
 
 export async function removeUserFile(url?: string | null) {
-  const match = /^\/api\/media\/(profiles|feedback|support)\/([a-zA-Z0-9_.-]+)$/.exec(url || "");
+  const match = /^\/api\/media\/(profiles|feedback|support|payments)\/([a-zA-Z0-9_.-]+)$/.exec(url || "");
   if (!match) return;
   if (firebaseUserStorageConfigured()) {
     await removeFirebaseUserFile(`user-content/${match[1]}/${match[2]}`).catch(() => undefined);
@@ -85,7 +88,7 @@ export async function removeUserFile(url?: string | null) {
 }
 
 export async function readUserFile(kind: string, fileName: string) {
-  if (kind !== "profiles" && kind !== "feedback" && kind !== "support") return null;
+  if (kind !== "profiles" && kind !== "feedback" && kind !== "support" && kind !== "payments") return null;
   if (!/^[a-zA-Z0-9_.-]+$/.test(fileName)) return null;
   const path = join(UPLOAD_ROOT, kind, fileName);
   if (!path.startsWith(join(UPLOAD_ROOT, kind))) return null;

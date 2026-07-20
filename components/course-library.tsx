@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
-import { ArrowLeft, BookOpen, CheckCircle2, Clock3, Film, PlayCircle } from "lucide-react";
+import { ArrowLeft, BookOpen, CheckCircle2, Clock3, FileText, Film, PlayCircle } from "lucide-react";
 import { CandleLoader } from "@/components/candle-loader";
 import { SecureVideoPlayer } from "@/components/secure-video-player";
 import { Reveal } from "@/components/ui";
@@ -121,7 +121,7 @@ export function CourseLibrary() {
             {videoLoading ? (
               <div className="cl-player-loading"><CandleLoader size="md" label="Loading course" /></div>
             ) : current ? (
-              <div className="mt-6">
+              <div className="mt-6 cl-watch-shell">
                 <SecureVideoPlayer
                   key={current.id}
                   videoUrl={`/api/drive/stream/${current.id}`}
@@ -129,11 +129,20 @@ export function CourseLibrary() {
                   poster={current.thumbnail || undefined}
                 />
                 <div className="cl-now-playing">
-                  <span className="cl-seq">{String(current.index).padStart(2, "0")}</span>
-                  <div><strong>{current.name}</strong><small>{duration(current.durationMillis)}</small></div>
-                  <button className="cl-complete" onClick={() => markWatched(current.id)}>
-                    <CheckCircle2 size={15} /> {watched.includes(current.id) ? "Completed" : "Mark complete"}
-                  </button>
+                  <div className="cl-current-kicker">
+                    <span className="cl-seq">{String(current.index).padStart(2, "0")}</span>
+                    <span>Now playing</span>
+                    {duration(current.durationMillis) && <em>{duration(current.durationMillis)}</em>}
+                  </div>
+                  <div className="cl-current-main">
+                    <div>
+                      <strong>{current.name}</strong>
+                      <small>{watched.includes(current.id) ? "Completed lesson" : "Protected stream · progress saved on this device"}</small>
+                    </div>
+                    <button className={watched.includes(current.id) ? "cl-complete done" : "cl-complete"} onClick={() => markWatched(current.id)}>
+                      <CheckCircle2 size={15} /> {watched.includes(current.id) ? "Completed" : "Mark complete"}
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -142,10 +151,10 @@ export function CourseLibrary() {
 
             {resources.length > 0 && (
               <div className="cl-resources">
-                <h3>Resources</h3>
+                <div className="cl-resources-head"><h3>Resources</h3><span>{resources.length} file{resources.length === 1 ? "" : "s"}</span></div>
                 {resources.map(r => (
                   <a key={r.id} href={`/api/drive/stream/${r.id}`} target="_blank" rel="noreferrer" className="cl-resource">
-                    <Film size={14} /> {r.name}
+                    <FileText size={15} /><span>{r.name}</span><em>{r.mimeType?.split("/").pop() || "file"}</em>
                   </a>
                 ))}
               </div>
