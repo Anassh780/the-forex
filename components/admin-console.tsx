@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { BarChart3, BookOpen, CloudUpload, CreditCard, FolderOpen, ImagePlus, LifeBuoy, Shield, ShieldAlert, Trash2, Users, UsersRound } from "lucide-react";
+import { BarChart3, BookOpen, CloudUpload, CreditCard, FolderOpen, ImagePlus, LifeBuoy, Link2, Shield, ShieldAlert, Trash2, Users, UsersRound } from "lucide-react";
 import { ContentUploader } from "@/components/content-uploader";
 import { CandleLoader } from "@/components/candle-loader";
 import { DriveManager } from "@/components/drive-manager";
@@ -11,9 +11,11 @@ import { AdvancedUsersManager, CommunityManager, PlansManager, SecurityManager, 
 type ProviderStatus = {
   connected?: boolean;
   accountEmail?: string | null;
+  accountName?: string | null;
   bucket?: string | null;
   folder?: string | null;
   error?: string;
+  missing?: string[];
 };
 
 type StorageStatus = { firebase?: ProviderStatus; drive?: ProviderStatus; error?: string };
@@ -568,7 +570,22 @@ function StrategyManager() {
   </section>;
 }
 
-function CoursesManager() {
+function DriveConnectPrompt({ title, description }: { title: string; description: string }) {
+  return <section className="admin-section">
+    <div className="admin-section-head">
+      <div><h2>{title}</h2><p>{description}</p></div>
+    </div>
+    <div className="admin-empty">
+      <strong>Google Drive is not connected</strong>
+      <small>Authorize Drive once with an administrator Google account. Vercel will store the connection securely in Turso.</small>
+      <a className="connection-button" href="/api/google-drive/connect?mode=drive" style={{ marginTop: 14 }}>
+        <Link2 size={14} /> Connect Drive
+      </a>
+    </div>
+  </section>;
+}
+
+function CoursesManager({ connected, checking }: { connected?: boolean; checking?: boolean }) {
   const [courses, setCourses] = useState<DriveCourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -577,6 +594,12 @@ function CoursesManager() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const refresh = useCallback(async () => {
+    if (!connected) {
+      setCourses([]);
+      setError("");
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -605,11 +628,16 @@ function CoursesManager() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [connected]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (connected) void refresh();
+    else if (!checking) {
+      setCourses([]);
+      setError("");
+      setLoading(false);
+    }
+  }, [connected, checking, refresh]);
 
   async function handleCoverUpload(course: DriveCourse, file: File) {
     setUploadingId(course.id);
@@ -638,6 +666,19 @@ function CoursesManager() {
     } finally {
       setUploadingId(null);
     }
+  }
+
+  if (checking) {
+    return <section className="admin-section admin-courses">
+      <div className="admin-section-head">
+        <div><h2>Drive courses</h2><p>Checking your Google Drive connection.</p></div>
+      </div>
+      <div className="admin-empty"><CandleLoader size="sm" label="Checking Drive" /></div>
+    </section>;
+  }
+
+  if (!connected) {
+    return <DriveConnectPrompt title="Drive courses" description="Connect Google Drive before loading course folders and cover images." />;
   }
 
   return <section className="admin-section admin-courses">
@@ -759,9 +800,9 @@ export function AdminConsole() {
       {/* Content */}
       <div className="admin-content">
         {tab === "Content storage" && <ContentUploader />}
-        {tab === "Content library" && <DriveManager />}
+        {tab === "Content library" && <DriveManager connected={driveConnected} checking={statusLoading} />}
         {tab === "Strategies" && <StrategyManager />}
-        {tab === "Courses" && <CoursesManager />}
+        {tab === "Courses" && <CoursesManager connected={driveConnected} checking={statusLoading} />}
         {tab === "Users" && <AdvancedUsersManager />}
         {tab === "Community" && <CommunityManager />}
         {tab === "Plans" && <PlansManager />}

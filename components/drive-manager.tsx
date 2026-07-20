@@ -10,6 +10,7 @@ import {
   FolderClosed,
   FolderInput,
   FolderPlus,
+  Link2,
   MoreVertical,
   Pencil,
   PlayCircle,
@@ -70,7 +71,7 @@ function sendChunk(url: string, chunk: Blob, start: number, total: number, onPro
   });
 }
 
-export function DriveManager() {
+export function DriveManager({ connected, checking }: { connected?: boolean; checking?: boolean }) {
   const [rootId, setRootId] = useState<string | null>(null);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [current, setCurrent] = useState<Folder | null>(null); // null = root
@@ -129,7 +130,18 @@ export function DriveManager() {
     }
   }, [loadRoot]);
 
-  useEffect(() => { void loadRoot(); }, [loadRoot]);
+  useEffect(() => {
+    if (connected) void loadRoot();
+    else if (!checking) {
+      setLoading(false);
+      setError("");
+      setFolders([]);
+      setEntries([]);
+      setRootFiles([]);
+      setRootId(null);
+      setCurrent(null);
+    }
+  }, [connected, checking, loadRoot]);
 
   async function createFolder() {
     const name = newFolderName.trim();
@@ -243,6 +255,36 @@ export function DriveManager() {
 
   const showRootView = !current;
   const folderCount = folders.length;
+
+  if (checking) {
+    return <section className="admin-section">
+      <div className="admin-section-head">
+        <div>
+          <h2>Content vault</h2>
+          <p>Checking your Google Drive connection.</p>
+        </div>
+      </div>
+      <div className="dm-loading"><CandleLoader size="md" label="Checking Drive" /></div>
+    </section>;
+  }
+
+  if (!connected) {
+    return <section className="admin-section">
+      <div className="admin-section-head">
+        <div>
+          <h2>Content vault</h2>
+          <p>Connect Google Drive once on this Vercel deployment before managing course folders.</p>
+        </div>
+      </div>
+      <div className="admin-empty">
+        <strong>Google Drive is not connected</strong>
+        <small>Use an administrator account and approve Drive access so Vercel can save a refresh token in Turso.</small>
+        <a className="connection-button" href="/api/google-drive/connect?mode=drive" style={{ marginTop: 14 }}>
+          <Link2 size={14} /> Connect Drive
+        </a>
+      </div>
+    </section>;
+  }
 
   return (
     <section className="admin-section">

@@ -425,7 +425,7 @@ const VIDEO_MIME_RE = /^video\//;
 
 async function driveAccessToken() {
   const stored = await readStore();
-  if (!stored) throw new Error("Connect Google Drive before managing content.");
+  if (!stored) throw new Error("Google Drive is not connected. Open Admin > Content storage and click Connect Drive.");
   const tokens = await refreshAccessToken(stored);
   if (!tokens.accessToken) throw new Error("Google Drive access token is unavailable.");
   return tokens.accessToken;
