@@ -20,7 +20,7 @@ Vercel functions cannot persist a local SQLite file. Production therefore uses T
 
 1. Create a Turso database and token.
 2. Apply every SQL file in `prisma/migrations` to the Turso database in filename order.
-3. Add `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` to Vercel Production and Preview environments.
+3. Add `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` to Vercel Production and Preview environments. Do not import `DATABASE_URL=file:./dev.db` into Vercel; that local SQLite path only works on your computer.
 4. Add all remaining values from `.env.example`. Set `NEXTAUTH_URL` to the final HTTPS production domain. `AUTH_SECRET` can be used instead of `NEXTAUTH_SECRET`, and `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` can be used instead of `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`. Set `GOOGLE_DRIVE_REDIRECT_URI` only when you need a custom Google callback path.
 5. In Google Cloud Console, register the same production callback URL under authorized redirect URIs.
 6. Use Firebase inline credentials (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY`) on Vercel; a local service-account file path is not available there.

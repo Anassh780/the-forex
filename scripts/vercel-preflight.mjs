@@ -1,5 +1,5 @@
 const integrations = {
-  database: ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"],
+  database: [["TURSO_DATABASE_URL", "DATABASE_URL"], "TURSO_AUTH_TOKEN"],
   authentication: [["NEXTAUTH_SECRET", "AUTH_SECRET"], "NEXTAUTH_URL"],
   googleDrive: [["GOOGLE_CLIENT_ID", "AUTH_GOOGLE_ID"], ["GOOGLE_CLIENT_SECRET", "AUTH_GOOGLE_SECRET"], "GOOGLE_ADMIN_EMAILS"],
   firebase: ["FIREBASE_PROJECT_ID", "FIREBASE_CLIENT_EMAIL", "FIREBASE_PRIVATE_KEY", "FIREBASE_STORAGE_BUCKET"],
@@ -11,6 +11,7 @@ const isSet = (variable) => {
   const value = process.env[variable]?.trim();
   return Boolean(value && !placeholderPatterns.some((pattern) => pattern.test(value)));
 };
+const isRemoteDatabaseUrl = (value) => value?.startsWith("libsql://") || value?.startsWith("https://");
 const hasVariable = (variable) => Array.isArray(variable) ? variable.some(isSet) : isSet(variable);
 const missingName = (variable) => Array.isArray(variable) ? variable.join(" or ") : variable;
 
@@ -23,9 +24,9 @@ if (process.env.VERCEL) {
     console.warn(`[Vercel setup] ${integration.name} is disabled until these variables are added: ${integration.missing.join(", ")}`);
   }
 
-  const tursoUrl = process.env.TURSO_DATABASE_URL?.trim();
-  if (tursoUrl && !tursoUrl.startsWith("libsql://") && !tursoUrl.startsWith("https://")) {
-    console.warn("[Vercel setup] TURSO_DATABASE_URL is not a remote libsql:// or https:// URL; persistent database features will remain disabled.");
+  const databaseUrl = process.env.TURSO_DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim();
+  if (databaseUrl && !isRemoteDatabaseUrl(databaseUrl)) {
+    console.warn("[Vercel setup] Production database URL must be remote libsql:// or https://. Remove DATABASE_URL=file:./dev.db from Vercel and set TURSO_DATABASE_URL.");
   }
 
   console.log(incomplete.length
