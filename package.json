@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "vercel-build": "node scripts/vercel-preflight.mjs && prisma generate && next build",
+    "vercel-build": "node scripts/vercel-preflight.mjs && node scripts/turso-migrate.mjs && prisma generate && next build",
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "next lint",

@@ -19,7 +19,7 @@ The repository includes `vercel.json`, a Vercel-specific build script, Prisma Cl
 Vercel functions cannot persist a local SQLite file. Production therefore uses Turso, which is SQLite-compatible and preserves the existing Prisma data model:
 
 1. Create a Turso database and token.
-2. Apply every SQL file in `prisma/migrations` to the Turso database in filename order.
+2. Apply every SQL file in `prisma/migrations` to the Turso database in filename order, or let the Vercel build run `scripts/turso-migrate.mjs` automatically after `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are set.
 3. Add `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` to Vercel Production and Preview environments. Do not import `DATABASE_URL=file:./dev.db` into Vercel; that local SQLite path only works on your computer.
 4. Add all remaining values from `.env.example`. Set `NEXTAUTH_URL` to the final HTTPS production domain. `AUTH_SECRET` can be used instead of `NEXTAUTH_SECRET`, and `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` can be used instead of `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`. Set `GOOGLE_DRIVE_REDIRECT_URI` only when you need a custom Google callback path.
 5. In Google Cloud Console, register the same production callback URL under authorized redirect URIs.
