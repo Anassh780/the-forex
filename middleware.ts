@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 const publicExact = new Set(["/", "/login", "/signup", "/vip"]);
 
 /** Prefixes that stay public for marketing + research browsing. */
-const publicPrefixes = ["/strategies", "/api/auth", "/api/register", "/api/google-drive", "/api/strategies", "/api/plans"];
+const publicPrefixes = ["/strategies", "/api/auth", "/api/register", "/api/google-drive", "/api/gooo", "/api/strategies", "/api/plans"];
 
 function isPublicPath(pathname: string) {
   if (publicExact.has(pathname)) return true;
