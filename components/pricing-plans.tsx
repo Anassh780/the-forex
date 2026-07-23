@@ -4,6 +4,7 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, BadgePercent, Check, CheckCircle2, Copy, Crown, Gem, LockKeyhole, ShieldCheck, Smartphone, Sparkles, TicketCheck, UploadCloud, Wallet, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useSession } from "next-auth/react";
 import type { CSSProperties } from "react";
 import { uniqueBy } from "@/lib/collections";
 
@@ -11,6 +12,12 @@ type Billing = "monthly" | "annual";
 type Plan = { id: string; slug: string; name: string; tagline: string; monthlyPrice: number; annualPrice: number; features: string[]; featured: boolean; trialDays: number };
 type PaymentMethod = { id: string; key: string; name: string; type: string; logoUrl: string; accent: string; accountName?: string | null; accountNo?: string | null; address?: string | null; network?: string | null; instructions: string; active: boolean };
 const icons = { starter: Zap, member: Gem, vip: Crown } as const;
+
+function roleToPlanSlug(role?: string | null) {
+  if (!role) return "";
+  if (role === "free") return "starter";
+  return role;
+}
 
 function Price({ plan, billing }: { plan: Plan; billing: Billing }) {
   const freePlan = plan.monthlyPrice === 0 && plan.annualPrice === 0;
@@ -27,12 +34,14 @@ function Price({ plan, billing }: { plan: Plan; billing: Billing }) {
 
 export function PricingPlans() {
   const [billing, setBilling] = useState<Billing>("annual");
+  const { data: session, status } = useSession();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [coupon, setCoupon] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState("");
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
+  const [currentPlan, setCurrentPlan] = useState<string | null>(null);
   const [selected, setSelected] = useState<Plan | null>(null);
   const [selectedMethod, setSelectedMethod] = useState("");
   const [txId, setTxId] = useState("");
@@ -55,6 +64,16 @@ export function PricingPlans() {
       if (response.ok) setMethods(Array.isArray(data.methods) ? data.methods : []);
     }).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    void fetch("/api/dashboard", { cache: "no-store" }).then(async response => {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to load current plan.");
+      const current = data.subscription?.tier || roleToPlanSlug(data.role);
+      setCurrentPlan(current || null);
+    }).catch(() => undefined);
+  }, [status]);
 
   const annualSaving = useMemo(() => plans.reduce((best, plan) => {
     if (plan.monthlyPrice <= 0 || plan.annualPrice <= 0 || plan.annualPrice >= plan.monthlyPrice) return best;
@@ -128,15 +147,15 @@ export function PricingPlans() {
         </header>
 
         {pageLoading ? <div className="plans-loading"><span className="admin-spinner" /> Loading current prices…</div> : <div className="plans-cards">
-          {plans.map((plan, index) => { const Icon = icons[plan.slug as keyof typeof icons] || Gem; const selectedPrice = billing === "annual" ? plan.annualPrice : plan.monthlyPrice; const missingPrice = !(plan.monthlyPrice === 0 && plan.annualPrice === 0) && selectedPrice <= 0; return <motion.article key={plan.id} initial={reduce ? false : { opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(index * .07, .14) }} className={`plan-card ${plan.featured ? "featured" : ""}`}>
-            <div className="plan-card-status">{plan.featured ? <><Sparkles size={12} /> Most popular</> : <>Plan {String(index + 1).padStart(2, "0")}</>}</div>
+          {plans.map((plan, index) => { const Icon = icons[plan.slug as keyof typeof icons] || Gem; const selectedPrice = billing === "annual" ? plan.annualPrice : plan.monthlyPrice; const missingPrice = !(plan.monthlyPrice === 0 && plan.annualPrice === 0) && selectedPrice <= 0; const isCurrentPlan = currentPlan === plan.slug; return <motion.article key={plan.id} initial={reduce ? false : { opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(index * .07, .14) }} className={`plan-card ${plan.featured ? "featured" : ""} ${isCurrentPlan ? "current-plan" : ""}`}>
+            <div className={`plan-card-status ${isCurrentPlan ? "current-plan" : ""}`}>{isCurrentPlan ? "Current plan" : plan.featured ? <><Sparkles size={12} /> Most popular</> : <>Plan {String(index + 1).padStart(2, "0")}</>}</div>
             <div className="plan-top"><span><Icon size={21} /></span><h2>{plan.name}</h2></div>
             <Price plan={plan} billing={billing} />
             {missingPrice && <p className="plan-missing-price">{billing} price is not configured</p>}
             <p className="plan-tagline">{plan.tagline}</p>
             {plan.trialDays > 0 && <div className="plan-trial"><Sparkles size={12} /> {plan.trialDays}-day free trial</div>}
             <div className="plan-includes"><small>WHAT&apos;S INCLUDED</small><ul>{plan.features.map(feature => <li key={feature}><span><Check size={12} /></span>{feature}</li>)}</ul></div>
-            <button type="button" onClick={() => subscribe(plan)} disabled={loading === plan.id || missingPrice}>{loading === plan.id ? <span className="admin-spinner" /> : <>{plan.monthlyPrice === 0 && plan.annualPrice === 0 ? "Create free account" : plan.trialDays > 0 ? `Start ${plan.trialDays}-day trial` : `Pay with wallet / crypto`}<ArrowRight size={16} /></>}</button>
+            <button type="button" onClick={() => subscribe(plan)} disabled={currentPlan === plan.slug || loading === plan.id || missingPrice}>{loading === plan.id ? <span className="admin-spinner" /> : <>{currentPlan === plan.slug ? "Current plan" : plan.monthlyPrice === 0 && plan.annualPrice === 0 ? "Create free account" : plan.trialDays > 0 ? `Start ${plan.trialDays}-day trial` : `Pay with wallet / crypto`}<ArrowRight size={16} /></>}</button>
           </motion.article>; })}
         </div>}
         {error && <p className="plans-error">{error}</p>}

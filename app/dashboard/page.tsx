@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   Activity, AlertTriangle, ArrowRight, BarChart3, BookOpen, Bookmark, CalendarDays,
@@ -136,11 +137,13 @@ function ProgressRing({ value }: { value: number }) {
 
 export default function Dashboard() {
   const { data: session, status } = useSession();
+  const searchParams = useSearchParams();
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true);
@@ -191,6 +194,14 @@ export default function Dashboard() {
   const stats = dashboard?.stats;
   const role = dashboard?.role || (session?.user as { role?: string })?.role || "free";
   const activeTier = dashboard?.subscription?.tier || role;
+
+  useEffect(() => {
+    if (!searchParams) return;
+    const checkout = searchParams.get("checkout");
+    const trial = searchParams.get("trial");
+    if (checkout === "success") setSuccessMessage("Subscription activated successfully. Welcome to your new plan!");
+    else if (trial === "started") setSuccessMessage("Your free trial is now active. Enjoy your new access!");
+  }, [searchParams]);
   const displayName = dashboard?.profile.name || session?.user?.name || session?.user?.email?.split("@")[0] || "Trader";
   const completionRate = stats?.coursesEnrolled ? Math.round((stats.coursesCompleted / stats.coursesEnrolled) * 100) : 0;
 
@@ -221,6 +232,7 @@ export default function Dashboard() {
               <span><ShieldCheck size={13} /> Account {role === "admin" ? "administrator" : "active"}</span>
               {loadError && <span className="text-loss"><AlertTriangle size={13} /> Sync retry scheduled</span>}
             </div>
+            {successMessage && <div className="dashboard-success-banner"><CheckCircle2 size={16} /><p>{successMessage}</p></div>}
           </section>
         </Reveal>
 
