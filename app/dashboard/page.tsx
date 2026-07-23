@@ -183,6 +183,14 @@ export default function Dashboard() {
     return items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()).slice(0, 6);
   }, [dashboard]);
 
+  useEffect(() => {
+    if (!searchParams) return;
+    const checkout = searchParams.get("checkout");
+    const trial = searchParams.get("trial");
+    if (checkout === "success") setSuccessMessage("Subscription activated successfully. Welcome to your new plan!");
+    else if (trial === "started") setSuccessMessage("Your free trial is now active. Enjoy your new access!");
+  }, [searchParams]);
+
   if (status === "loading" || loading) return <div className="container-shell grid min-h-[55vh] place-items-center"><CandleLoader label="Opening live workspace" /></div>;
 
   if (loadError && !dashboard) {
@@ -195,15 +203,10 @@ export default function Dashboard() {
   const role = dashboard?.role || (session?.user as { role?: string })?.role || "free";
   const activeTier = dashboard?.subscription?.tier || role;
 
-  useEffect(() => {
-    if (!searchParams) return;
-    const checkout = searchParams.get("checkout");
-    const trial = searchParams.get("trial");
-    if (checkout === "success") setSuccessMessage("Subscription activated successfully. Welcome to your new plan!");
-    else if (trial === "started") setSuccessMessage("Your free trial is now active. Enjoy your new access!");
-  }, [searchParams]);
   const displayName = dashboard?.profile.name || session?.user?.name || session?.user?.email?.split("@")[0] || "Trader";
-  const completionRate = stats?.coursesEnrolled ? Math.round((stats.coursesCompleted / stats.coursesEnrolled) * 100) : 0;
+  const completionRate = stats && stats.coursesEnrolled
+    ? Math.round((stats.coursesCompleted / stats.coursesEnrolled) * 100)
+    : 0;
 
   return (
     <div className="dashboard-v2">
